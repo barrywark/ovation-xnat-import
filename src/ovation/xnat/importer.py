@@ -29,7 +29,7 @@ DATE_FORMAT = '%Y-%m-%d'
 DATETIME_FORMAT = '%Y-%m-%d %H:%M:%S.%f'
 
 
-def import_project(dsc, xnatProject, timezone='UTC'):
+def import_project(dsc, xnatProject, timezone='UTC', importProjectTree=True):
     """
     Import a single XNAT project.
 
@@ -75,10 +75,11 @@ def import_project(dsc, xnatProject, timezone='UTC'):
 
     _import_entity_common(project, xnatProject)
 
-    for s in iterate_entity_collection(xnatProject.subjects):
-        src = import_source(dsc, s)
-        for session in iterate_entity_collection(s.sessions):
-            import_session(dsc, src, project, session)
+    if importProjectTree:
+        for s in iterate_entity_collection(xnatProject.subjects):
+            src = import_source(dsc, s)
+            for session in iterate_entity_collection(s.experiments):
+                import_session(dsc, src, project, session)
 
     return project
 

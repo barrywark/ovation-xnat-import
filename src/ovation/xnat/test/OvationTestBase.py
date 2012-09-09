@@ -1,10 +1,14 @@
 '''
 Copyright (c) 2012 Physion Consulting, LLC
 '''
+import functools
+import pyxnat
+
 __author__ = 'barry'
 
 from pyxnat import Interface
 from ovation.xnat.importer import import_project
+from mock import MagicMock, patch, Mock
 
 import unittest
 import os
@@ -27,21 +31,20 @@ class OvationTestException(exceptions.StandardError):
 class OvationTestBase(unittest.TestCase):
 
     def _import_first_project(self):
-        self._init_xnat_connection()
-
+        self.xnat = self._xnat_connection()
         xnatProject = self.xnat.select.project('IGT_FMRI_NEURO')
-        projectURI = import_project(self.dsc, xnatProject).getURI()
+        projectURI = import_project(self.dsc, xnatProject, importProjectTree=False).getURI()
         return (xnatProject,projectURI)
 
-    def _init_xnat_connection(self):
-        self.xnat = Interface(os.environ["XNAT_URL"],
+    def _xnat_connection(self):
+        xnat = Interface(os.environ["XNAT_URL"],
             os.environ["XNAT_USER"],
             os.environ["XNAT_PASSWORD"])
-        self.xnat.cache.clear()
-        self.xnat.manage.schemas.add("xnat.xsd")
-        self.xnat.manage.schemas.add("fs.xsd")
+        xnat.cache.clear()
+        xnat.manage.schemas.add("xnat.xsd")
+        xnat.manage.schemas.add("fs.xsd")
 
-        return self.xnat
+        return xnat
 
     def setUp(self):
         api.initialize(extra_jars=(os.environ[OVATION_TEST_JAR_PATH_KEY],os.environ[OVATION_TEST_JAR_PATH_KEY]))
@@ -52,8 +55,15 @@ class OvationTestBase(unittest.TestCase):
         self.connection_file_path = os.environ[CONNECTION_PATH_KEY]
 
         if not os.path.exists(self.connection_file_path):
+            if 'OVATION_LOCK_SERVER' in os.environ:
+                host = os.environ['OVATION_LOCK_SERVER']
+            else:
+                host = gethostname()
+                if host == 'localhost':
+                    host = '127.0.0.1'
+
             create_local_database(self.connection_file_path,
-                host=gethostname(),
+                host=host,
                 federatedDatabaseID=os.environ.get(OVATION_FDID_KEY, None))
 
         test = api.ovation_package().test
@@ -67,8 +77,103 @@ class OvationTestBase(unittest.TestCase):
 
         self.dsc = self.test_manager.setupDatabase()
 
+
     def tearDown(self):
         clean_local_database(self.test_manager)
 
+def call_fn(fn, *args, **kwargs):
+    return fn(*args, **kwargs)
+
+def no_op():
+    pass
+
+def patch_xnat_api(func):
+    """
+    Patch xnat_api pausing calls
+    """
+    @functools.wraps(func)
+    @patch("ovation.xnat.util.xnat_api", call_fn)
+    @patch("ovation.xnat.util.xnat_api_pause", no_op)
+    def wrapper(*args):
+        func(*args)
+
+    return wrapper
+
+
+def subject_mock(id, project):
+    s = MagicMock(name='subject', spec=pyxnat.core.resources.Subject)
+
+    s.id = Mock(return_value=id)
+    s.datatype = Mock(return_value='xnat:subjectData')
+    s._uri = '/subjects/' + id
+    attrs = {
+        'xnat:subjectData/project' : project.id()
+    }
+    _set_mock_attrs(attrs, s)
+
+    #TODO sessions
+
+    return s
+
+
+def return_values(values):
+    while True:
+        yield values
+
+def _set_mock_attrs(attrs_values, mockEntity):
+    mockEntity.mock_add_spec(['attrs'])
+    if not hasattr(mockEntity, 'attrs'):
+        mockEntity.attrs = MagicMock()
+
+    mockEntity.attrs.get.side_effect = attrs_values.get
+    mockEntity.attrs.side_effect = return_values(attrs_values.keys())
+
+
+def project_mock(projectName='PROJECT_NAME'):
+    projectMock = MagicMock(name='xnatProject', spec=pyxnat.core.resources.Project)
+
+    projectMock.id = Mock(return_value=projectName)
+
+    projectMock._uri = '/projects/' + projectName
+
+    xnat = MagicMock(name='xnat')
+    xnat._server = 'http://my.xnat'
+    projectMock._intf = xnat
+    # xnat.inspect.experiment_types
+    xnat.inspect.experiment_types.return_value = ('xnat:mrSessionData', 'xnat:ctSessionData')
+    # xnat.select().where()
+    sessionDates = [
+        {'date': '2012-01-01', 'project': 'PROJECT2'},
+        {'date': '2012-02-02', 'project': 'PROJECT2'}
+    ]
+    select = xnat.select
+    where = select.return_value.where
+    where.return_value = sessionDates
+    # project attrs
+    attrs = {'xnat:projectData/name': projectName,
+             'xnat:projectData/description': 'PROJECT_DESCRIPTION',
+             'xnat:projecdtData/keywords': 'TAG1, TAG2',
+    }
+    _set_mock_attrs(attrs, projectMock)
+    # _import_entity_common
+    projectMock.datatype = Mock(return_value='xnat:projectData')
+
+    # _xnatProject.subjects
+    subjects = [subject_mock('1', projectMock), subject_mock('2', projectMock)]
+    projectMock.subjects = Mock(side_effect=return_values(subjects))
+
+    return projectMock
+
+
+def mock_project_for_import(func):
+    projectMock = project_mock()
+
+    @functools.wraps(func)
+    def wrapper(*args):
+        args = list(args)
+        args.append(projectMock)
+        func(*args)
+
+    return wrapper
 
 

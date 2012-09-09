@@ -8,9 +8,10 @@
       <env name="XNAT_USER" value="bwark" />
       <env name="PYTHONPATH" value="src:test:$PYTHONPATH" />
       <env name="OVATION_API_JAR_PATH" value="lib/ovation-api-1.4.jar" />
+      <env name="OVATION_LOCK_SERVER" value="oso.local" />
       <env name="XNAT_URL" value="https://central.xnat.org" />
-      <env name="OVATION_TEST_JAR_PATH" value="lib/ovation-test-manager-1.4.jar" />
       <env name="OVATION_CONNECTION_FILE" value="xnat_test_database.connection" />
+      <env name="OVATION_TEST_JAR_PATH" value="lib/ovation-test-manager-1.4.jar" />
     </envs>
     <option name="SDK_HOME" value="$PROJECT_DIR$/../.virtualenvs/xnat/bin/python" />
     <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />

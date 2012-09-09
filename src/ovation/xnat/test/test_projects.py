@@ -19,6 +19,7 @@ from ovation.xnat.test.OvationTestBase import OvationTestBase
 
 class ImportingProjects(OvationTestBase):
 
+    #TODO
 #    @istest
 #    def should_import_all_projects_form_xnat(self):
 #        central = Interface(os.environ["XNAT_URL"],
@@ -37,7 +38,7 @@ class ImportingProjects(OvationTestBase):
         xnatProject,projectURI = self._import_first_project()
 
         ctx = self.dsc.getContext()
-        project = ctx.objectdWithURI(projectURI)
+        project = ctx.objectWithURI(projectURI)
 
         xnat_api_pause()
         expectedName = xnatProject.attrs.get('xnat:projectData/name')
@@ -52,7 +53,7 @@ class ImportingProjects(OvationTestBase):
         xnatProject,projectURI = self._import_first_project()
 
         ctx = self.dsc.getContext()
-        project = ctx.objectdWithURI(projectURI)
+        project = ctx.objectWithURI(projectURI)
 
         xnat_api_pause()
         expectedKeywords = xnatProject.attrs.get('xnat:projectData/keywords').split()
@@ -64,7 +65,7 @@ class ImportingProjects(OvationTestBase):
         xnatProject,projectURI = self._import_first_project()
 
         ctx = self.dsc.getContext()
-        project = ctx.objectdWithURI(projectURI)
+        project = ctx.objectWithURI(projectURI)
 
         eq_(project.getOwnerProperty(DATATYPE_PROPERTY), xnat_api(xnatProject.datatype))
 
