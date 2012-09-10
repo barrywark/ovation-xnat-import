@@ -79,14 +79,30 @@ def import_project(dsc, xnatProject, timezone='UTC', importProjectTree=True):
 
     if importProjectTree:
         for s in iterate_entity_collection(xnatProject.subjects):
-            src = import_source(dsc, s)
-            for session in iterate_entity_collection(s.experiments):
-                import_session(dsc, src, project, session)
+            import_subject(dsc, s, timezone=timezone)
 
     return project
 
-def import_session(dsc, src, project, xnatSession):
-    pass
+def import_session(dsc, src, project, xnatSession, timezone='UTC'):
+    if project == None:
+        return
+
+    attrs = xnatSession.attrs
+    dtype = xnat_api(xnatSession.datatype)
+    dateString = xnat_api(attrs.get, dtype + '/date')
+    timeString = xnat_api(attrs.get, dtype + '/time')
+    purpose = xnat_api(attrs.get, dtype + '/note')
+    if not purpose: #None or len 0
+        purpose = 'XNAT experiment ' + xnatSession._uri
+
+    dateTimeString = dateString + ' ' + timeString
+    startTime = datetime.fromtimestamp(mktime(strptime(dateTimeString, DATE_FORMAT if len(timeString) == 0 else DATETIME_FORMAT)))
+
+    exp = project.insertExperiment(purpose, to_joda_datetime(startTime, timezone))
+    _import_entity_common(exp, xnatSession)
+
+    epochGroup = exp.insertEpochGroup(src, dtype, to_joda_datetime(startTime, timezone))
+    return epochGroup
 
 
 def _add_entity_keywords(ovEntity, xnatEntity):
@@ -103,7 +119,7 @@ def _add_entity_attributes(ovEntity, xnatEntity):
         ovEntity.addProperty(k, v)
 
 
-def _add_entity_resources(ovEntity, xnatEntity):
+def _insert_entity_resources(ovEntity, xnatEntity):
     xnat = xnatEntity._intf
     for f in entity_resource_files(xnatEntity):
         fileExt = os.path.splitext(f._uri)[-1].lstrip('.')
@@ -114,7 +130,9 @@ def _add_entity_resources(ovEntity, xnatEntity):
         else:
             uti = ovation.api.ovation_package().Resource.UTIForExtension(fileExt)
 
-        ovEntity.addURLResource(uti, xnat._server + f._uri)
+        url = xnat._server + f._uri
+
+        ovEntity.addURLResource(uti, url, url)
 
 
 def _import_entity_common(ovEntity, xnatEntity):
@@ -122,9 +140,9 @@ def _import_entity_common(ovEntity, xnatEntity):
     dtype = xnatEntity.datatype()
     ovEntity.addProperty(DATATYPE_PROPERTY, dtype)
     _add_entity_keywords(ovEntity, xnatEntity)
-    _add_entity_resources(ovEntity, xnatEntity)
+    _insert_entity_resources(ovEntity, xnatEntity)
 
-def import_source(dsc, xnatSubject):
+def import_subject(dsc, xnatSubject, project=None, timezone='UTC'):
     """
     Insert a single XNAT subject
     """
@@ -138,6 +156,9 @@ def import_source(dsc, xnatSubject):
 
     if r.isNew():
         _import_entity_common(src, xnatSubject)
+        
+    for xnatExperiment in iterate_entity_collection(xnatSubject.experiments):
+        import_session(dsc, src, project, xnatExperiment, timezone=timezone)
 
     return src
 

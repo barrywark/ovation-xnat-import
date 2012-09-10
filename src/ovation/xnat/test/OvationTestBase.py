@@ -99,8 +99,13 @@ def patch_xnat_api(func):
 
     return wrapper
 
+def _mock_entity(attrs):
+    m = MagicMock()
+    _set_mock_attrs(attrs, m)
 
-def subject_mock(id, project):
+    return m
+
+def subject_mock(id, projectID):
     s = MagicMock(name='subject', spec=pyxnat.core.resources.Subject)
 
     xnat = _set_mock_intf(s)
@@ -108,12 +113,24 @@ def subject_mock(id, project):
     s.datatype = Mock(return_value='xnat:subjectData')
     s._uri = '/subjects/' + id
     attrs = {
-        'xnat:subjectData/project' : project.id()
+        'xnat:subjectData/project' : projectID
     }
     _set_mock_attrs(attrs, s)
 
     #Sessions
-    s.experiments = Mock(return_value=return_collection([]))
+    expAttrs = { 'xnat:mrSessionData/date' : '2012-02-03',
+                 'xnat:mrSessionData/time' : '08:13:23.2' }
+
+    exp1 = _mock_entity(expAttrs)
+    exp1.datatype = Mock(side_effect=return_collection('xnat:mrSessionData'))
+    exp1.id = Mock(return_value='1')
+    exp1._uri = s._uri + '/experiments/' + exp1.id()
+    exp1._intf = xnat
+    _add_mock_resource_files(xnat, exp1)
+
+    sessions = (exp1,)
+
+    s.experiments = Mock(side_effect=return_collection(sessions))
 
     # Resources
     _add_mock_resource_files(xnat, s)
@@ -147,15 +164,19 @@ def _add_mock_resource_files(xnat, mockEntity):
     file1 = Mock()
     file1.get = Mock(return_value=xnat._server + file1URI)
     file1._uri = file1URI
+
     file2URI = '/file2.dcm'
     file2 = Mock()
     file2.get = Mock(return_value=xnat._server + file2URI)
     file2._uri = file2URI
+
     files = (file1, file2)
+
     rsrcMock = Mock()
     _set_mock_intf(rsrcMock)
     rsrcMock.files = Mock(side_effect=return_collection(files))
-    resources = (rsrcMock, rsrcMock)
+
+    resources = (rsrcMock,)
     mockEntity.resources = Mock(side_effect=return_collection(resources))
 
 

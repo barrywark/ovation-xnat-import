@@ -31,6 +31,8 @@ class ImportingSubjects(OvationTestBase):
     @patch_xnat_api
     @mock_project_for_import
     def should_set_subject_datatype_property(self, xnatProject):
+        import_project(self.dsc, xnatProject, importProjectTree=True)
+
         ctx = self.dsc.getContext()
 
         for s in iterate_entity_collection(xnatProject.subjects):
