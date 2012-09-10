@@ -38,13 +38,13 @@ class ImportingSessions(OvationTestBase):
             self.assertNotNone(exp.getOwnerProperty(DATATYPE_PROPERTY))
 
     @istest
+    @patch_xnat_api
     def should_import_epochgroup_per_scan(self):
-        self.fail("implement")
+        xnatSubject = subject_mock("1", "PROJECT_NAME")
 
-    @istest
-    def should_import_epoch_per_file(self):
-        """
-        Should import files as URLResponses, not as Resources
-        """
+        ctx = self.dsc.getContext()
+        project = ctx.insertProject('session_import', 'session_import', api.datetime())
+        s = import_subject(self.dsc, xnatSubject, project=project)
 
-        self.fail("implement")
+        self.fail('implement')
+
