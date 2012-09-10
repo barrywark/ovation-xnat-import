@@ -1,12 +1,14 @@
 '''
 Copyright (c) 2012 Physion Consulting, LLC. All rights reserved.
 '''
+import os
+import ovation
 
 from ovation.xnat.exceptions import OvationXnatException
 from time import mktime, strptime
 from datetime import datetime
 import ovation.api as api
-from ovation.xnat.util import  xnat_api_pause, xnat_api, atomic_attributes, entity_keywords, iterate_entity_collection, to_joda_datetime
+from ovation.xnat.util import  xnat_api_pause, xnat_api, atomic_attributes, entity_keywords, iterate_entity_collection, to_joda_datetime, entity_resource_files
 
 
 class XnatImportError(OvationXnatException):
@@ -100,11 +102,27 @@ def _add_entity_attributes(ovEntity, xnatEntity):
     for (k, v) in attributes.iteritems():
         ovEntity.addProperty(k, v)
 
+
+def _add_entity_resources(ovEntity, xnatEntity):
+    xnat = xnatEntity._intf
+    for f in entity_resource_files(xnatEntity):
+        fileExt = os.path.splitext(f._uri)[-1].lstrip('.')
+
+        #TODO: special cased
+        if fileExt == 'dcm':
+            uti = 'org.nema.dicom'
+        else:
+            uti = ovation.api.ovation_package().Resource.UTIForExtension(fileExt)
+
+        ovEntity.addURLResource(uti, xnat._server + f._uri)
+
+
 def _import_entity_common(ovEntity, xnatEntity):
     _add_entity_attributes(ovEntity, xnatEntity)
     dtype = xnatEntity.datatype()
     ovEntity.addProperty(DATATYPE_PROPERTY, dtype)
     _add_entity_keywords(ovEntity, xnatEntity)
+    _add_entity_resources(ovEntity, xnatEntity)
 
 def import_source(dsc, xnatSubject):
     """

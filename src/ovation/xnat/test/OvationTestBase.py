@@ -103,6 +103,7 @@ def patch_xnat_api(func):
 def subject_mock(id, project):
     s = MagicMock(name='subject', spec=pyxnat.core.resources.Subject)
 
+    xnat = _set_mock_intf(s)
     s.id = Mock(return_value=id)
     s.datatype = Mock(return_value='xnat:subjectData')
     s._uri = '/subjects/' + id
@@ -111,14 +112,26 @@ def subject_mock(id, project):
     }
     _set_mock_attrs(attrs, s)
 
-    #TODO sessions
+    #Sessions
+    s.experiments = Mock(return_value=return_collection([]))
+
+    # Resources
+    _add_mock_resource_files(xnat, s)
 
     return s
 
 
-def return_values(values):
+def return_collection(values):
     while True:
         yield values
+
+def _set_mock_intf(mockEntity):
+    xnat = MagicMock(name='xnat')
+    xnat._server = 'http://my.xnat'
+
+    mockEntity._intf = xnat
+
+    return xnat
 
 def _set_mock_attrs(attrs_values, mockEntity):
     mockEntity.mock_add_spec(['attrs'])
@@ -126,7 +139,24 @@ def _set_mock_attrs(attrs_values, mockEntity):
         mockEntity.attrs = MagicMock()
 
     mockEntity.attrs.get.side_effect = attrs_values.get
-    mockEntity.attrs.side_effect = return_values(attrs_values.keys())
+    mockEntity.attrs.side_effect = return_collection(attrs_values.keys())
+
+
+def _add_mock_resource_files(xnat, mockEntity):
+    file1URI = '/file.dcm'
+    file1 = Mock()
+    file1.get = Mock(return_value=xnat._server + file1URI)
+    file1._uri = file1URI
+    file2URI = '/file2.dcm'
+    file2 = Mock()
+    file2.get = Mock(return_value=xnat._server + file2URI)
+    file2._uri = file2URI
+    files = (file1, file2)
+    rsrcMock = Mock()
+    _set_mock_intf(rsrcMock)
+    rsrcMock.files = Mock(side_effect=return_collection(files))
+    resources = (rsrcMock, rsrcMock)
+    mockEntity.resources = Mock(side_effect=return_collection(resources))
 
 
 def project_mock(projectName='PROJECT_NAME'):
@@ -136,9 +166,8 @@ def project_mock(projectName='PROJECT_NAME'):
 
     projectMock._uri = '/projects/' + projectName
 
-    xnat = MagicMock(name='xnat')
-    xnat._server = 'http://my.xnat'
-    projectMock._intf = xnat
+    xnat = _set_mock_intf(projectMock)
+
     # xnat.inspect.experiment_types
     xnat.inspect.experiment_types.return_value = ('xnat:mrSessionData', 'xnat:ctSessionData')
     # xnat.select().where()
@@ -149,18 +178,23 @@ def project_mock(projectName='PROJECT_NAME'):
     select = xnat.select
     where = select.return_value.where
     where.return_value = sessionDates
+
     # project attrs
     attrs = {'xnat:projectData/name': projectName,
              'xnat:projectData/description': 'PROJECT_DESCRIPTION',
              'xnat:projecdtData/keywords': 'TAG1, TAG2',
     }
     _set_mock_attrs(attrs, projectMock)
-    # _import_entity_common
+
+    # Datatype
     projectMock.datatype = Mock(return_value='xnat:projectData')
 
-    # _xnatProject.subjects
+    # Subjects
     subjects = [subject_mock('1', projectMock), subject_mock('2', projectMock)]
-    projectMock.subjects = Mock(side_effect=return_values(subjects))
+    projectMock.subjects = Mock(side_effect=return_collection(subjects))
+
+    # Resources
+    _add_mock_resource_files(xnat, projectMock)
 
     return projectMock
 

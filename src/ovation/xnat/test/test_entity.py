@@ -30,8 +30,6 @@ class ImportingEntityMetadata(OvationTestBase):
         project = import_project(self.dsc, xnatProject, importProjectTree=False)
         xnat = xnatProject._intf
 
-        self.fail('implement resource mocks')
-
         files = entity_resource_files(xnatProject)
         for f in files:
             fileURI = xnat._server + f._uri
