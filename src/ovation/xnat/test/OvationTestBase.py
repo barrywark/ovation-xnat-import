@@ -250,7 +250,7 @@ def project_mock(projectName='PROJECT_NAME'):
     projectMock.datatype = Mock(return_value='xnat:projectData')
 
     # Subjects
-    subjects = [subject_mock('1', projectMock), subject_mock('2', projectMock)]
+    subjects = [subject_mock('1', projectMock.id()), subject_mock('2', projectMock.id())]
     projectMock.subjects = Mock(side_effect=return_collection(subjects))
 
     # Resources

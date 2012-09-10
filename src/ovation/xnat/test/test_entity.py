@@ -4,7 +4,7 @@ Copyright (c) 2012 Physion Consulting, LLC. All rights reserved.
 
 from ovation.xnat.util import xnat_api, entity_keywords, is_atomic_attribute, entity_resource_files
 from nose.tools import  istest, eq_
-from ovation.xnat.test.OvationTestBase import OvationTestBase, mock_project_for_import, patch_xnat_api, subject_mock, project_mock
+from ovation.xnat.test.OvationTestBase import OvationTestBase, mock_project_for_import, patch_xnat_api, subject_mock
 from ovation.xnat.importer import import_subject, import_project
 
 
@@ -31,15 +31,13 @@ class ImportingEntityMetadata(OvationTestBase):
         xnat = xnatProject._intf
 
         files = entity_resource_files(xnatProject)
-        for f in files:
-            fileURI = xnat._server + f._uri
-            self.assertIsNotNone(project.getResource(fileURI))
+        self.assertEquals(len(project.getResourceNames()), len(files))
 
     @istest
     def should_import_attrs(self):
 
         projectName = 'PROJECT_NAME'
-        xnatSubject = subject_mock('1', project_mock(projectName))
+        xnatSubject = subject_mock('1', projectName)
         subject = import_subject(self.dsc, xnatSubject)
 
         attributes = xnat_api(xnatSubject.attrs)

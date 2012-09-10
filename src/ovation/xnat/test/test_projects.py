@@ -106,7 +106,7 @@ class ImportingProjects(OvationTestBase):
 
 
         ctx = self.dsc.getContext()
-        project = ctx.objectdWithURI(projectURI)
+        project = ctx.objectWithURI(projectURI)
 
 
         eq_(project.getStartTime(), startTime)
