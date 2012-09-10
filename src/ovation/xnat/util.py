@@ -37,6 +37,13 @@ def entity_resource_files(e):
             yield f
 
 
+def dict2map(d):
+    m = api.jpype.java.util.HashMap()
+    for (k,v) in d.iteritems():
+        m.put(k,v)
+
+    return m
+
 def is_atomic_attribute(e, attr):
     return _is_atomic_attribute_in_attrs(attr, e.attrs())
 

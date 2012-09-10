@@ -105,6 +105,49 @@ def _mock_entity(attrs):
 
     return m
 
+
+def session_mock(baseURI=None, xnat=None):
+    expAttrs = {'xnat:mrSessionData/date': '2012-02-03',
+                'xnat:mrSessionData/time': '08:13:23.2',
+                'xnat:mrSessionData/duration': '12',
+                'xnat:mrSessionData/scanner': 'MR Scanner',
+                }
+
+    exp1 = _mock_entity(expAttrs)
+    exp1.datatype = Mock(side_effect=return_collection('xnat:mrSessionData'))
+    exp1.id = Mock(return_value='1')
+
+    if xnat is None:
+        xnat = _set_mock_intf(exp1)
+    exp1._intf = xnat
+    _add_mock_resource_files(xnat, exp1)
+
+    if baseURI is None:
+        baseURI = xnat._server
+
+    exp1._uri = baseURI + '/experiments/' + exp1.id()
+
+    scanAttrs = {'xnat:mrScanData/date': '2012-02-03',
+                'xnat:mrScanData/time': '08:13:23.2',
+                'xnat:mrScanData/parameters/scanTime' : '08:13:23.2',
+                'xnat:mrScanData/type': 'Some Scan Type',
+                'xnat:mrScanData/parameters/voxelRes/units' : 'cm',
+                'xnat:mrScanData/parameters/voxelRes/x' : 0.1,
+                'xnat:mrScanData/parameters/voxelRes/y' : 0.2,
+                'xnat:mrScanData/parameters/voxelRes/z' : 0.3}
+
+    scan = _mock_entity(scanAttrs)
+    _set_mock_intf(scan)
+    scan.datatype = Mock(side_effect=return_collection('xnat:mrScanData'))
+    scan.parent = Mock(return_value = exp1)
+    scan.id = Mock(return_value="1")
+    _add_mock_resource_files(xnat, scan)
+
+    exp1.scans = Mock(side_effect=return_collection((scan,)))
+
+    return exp1
+
+
 def subject_mock(id, projectID):
     s = MagicMock(name='subject', spec=pyxnat.core.resources.Subject)
 
@@ -117,23 +160,16 @@ def subject_mock(id, projectID):
     }
     _set_mock_attrs(attrs, s)
 
-    #Sessions
-    expAttrs = { 'xnat:mrSessionData/date' : '2012-02-03',
-                 'xnat:mrSessionData/time' : '08:13:23.2' }
+    # Resources
 
-    exp1 = _mock_entity(expAttrs)
-    exp1.datatype = Mock(side_effect=return_collection('xnat:mrSessionData'))
-    exp1.id = Mock(return_value='1')
-    exp1._uri = s._uri + '/experiments/' + exp1.id()
-    exp1._intf = xnat
-    _add_mock_resource_files(xnat, exp1)
+    _add_mock_resource_files(xnat, s)
+
+    #Sessions
+    exp1 = session_mock(baseURI=s._uri, xnat=xnat)
 
     sessions = (exp1,)
 
     s.experiments = Mock(side_effect=return_collection(sessions))
-
-    # Resources
-    _add_mock_resource_files(xnat, s)
 
     return s
 
@@ -162,18 +198,21 @@ def _set_mock_attrs(attrs_values, mockEntity):
 def _add_mock_resource_files(xnat, mockEntity):
     file1URI = '/file.dcm'
     file1 = Mock()
-    file1.get = Mock(return_value=xnat._server + file1URI)
+    #file1.get = Mock(side_effect=return_collection(xnat._server + file1URI))
     file1._uri = file1URI
+    file1.label = Mock(side_effect=return_collection('file.dcm'))
 
     file2URI = '/file2.dcm'
     file2 = Mock()
-    file2.get = Mock(return_value=xnat._server + file2URI)
+    #file2.get = Mock(side_effect=return_collection(xnat._server + file2URI))
     file2._uri = file2URI
+    file2.label = Mock(side_effect=return_collection('file2.dcm'))
 
     files = (file1, file2)
 
     rsrcMock = Mock()
     _set_mock_intf(rsrcMock)
+    rsrcMock.label = Mock(side_effect=return_collection('DICOM'))
     rsrcMock.files = Mock(side_effect=return_collection(files))
 
     resources = (rsrcMock,)

@@ -8,7 +8,7 @@ from ovation.xnat.exceptions import OvationXnatException
 from time import mktime, strptime
 from datetime import datetime
 import ovation.api as api
-from ovation.xnat.util import  xnat_api_pause, xnat_api, atomic_attributes, entity_keywords, iterate_entity_collection, to_joda_datetime, entity_resource_files
+from ovation.xnat.util import  xnat_api_pause, xnat_api, atomic_attributes, entity_keywords, iterate_entity_collection, to_joda_datetime, dict2map
 
 
 class XnatImportError(OvationXnatException):
@@ -101,8 +101,69 @@ def import_session(dsc, src, project, xnatSession, timezone='UTC'):
     exp = project.insertExperiment(purpose, to_joda_datetime(startTime, timezone))
     _import_entity_common(exp, xnatSession)
 
-    epochGroup = exp.insertEpochGroup(src, dtype, to_joda_datetime(startTime, timezone))
-    return epochGroup
+    for scan in iterate_entity_collection(xnatSession.scans):
+        import_scan(dsc, src, exp, scan, timezone=timezone)
+
+    return exp
+
+def import_scan(dsc, src, exp, xnatScan, timezone='UTC'):
+
+    attrs = xnatScan.attrs
+    dtype = xnat_api(xnatScan.datatype)
+    dateString = xnat_api(attrs.get, dtype + '/date')
+    timeString = xnat_api(attrs.get, dtype + '/parameters/scanTime')
+    dateTimeString = dateString + ' ' + timeString
+
+    startTime = to_joda_datetime(
+        datetime.fromtimestamp(mktime(strptime(dateTimeString, DATE_FORMAT if len(timeString) == 0 else DATETIME_FORMAT))),
+                timezone)
+
+    parentSession = xnat_api(xnatScan.parent)
+    parentDtype = xnat_api(parentSession.datatype)
+    scanAttrs = parentSession.attrs
+    sessionScanner = xnat_api(scanAttrs.get, parentDtype + '/scanner')
+    duration = float(xnat_api(scanAttrs.get, parentDtype + '/duration'))
+    endTime = startTime.plusMillis(int(duration*1000))
+
+    scanType = xnat_api(attrs.get, dtype + '/type')
+    g = exp.insertEpochGroup(src, scanType, startTime, endTime)
+    _import_entity_common(g, xnatScan, resources=False)
+
+    parameters = dict2map({}) #TODO from parameters/ attrs or from .get_params()?
+    scannerParameters = parameters
+
+    ovation = api.ovation_package()
+    BYTE_DATATYPE = ovation.NumericDataType(ovation.NumericDataFormat.SignedFixedPointDataType, 1, ovation.NumericByteOrder.ByteOrderNeutral)
+    for r in iterate_entity_collection(xnatScan.resources):
+        # Insert one epoch group per resource group
+        resourceGroup = g.insertEpochGroup(xnat_api(r.label),
+                            g.getStartTime())
+
+        for f in iterate_entity_collection(r.files):
+            # Import one epoch per resource file
+
+            e = resourceGroup.insertEpoch(
+                g.getStartTime(),
+                g.getEndTime(), #TODO
+                scanType,
+                parameters
+            )
+
+            url,uti = file_info(xnatScan._intf, f)
+            e.insertURLResponse(
+                resourceGroup.getExperiment().externalDevice(sessionScanner, sessionScanner), #TODO
+                scannerParameters,
+                url,
+                [1,1], # Shape
+                BYTE_DATATYPE,
+                'unknown', #TODO units
+                ['x', 'y'],
+                [1.0, 1.0], # TODO sampling rate
+                ['pixels', 'pixels'], # TODO srate units
+                uti
+            )
+
+    return g
 
 
 def _add_entity_keywords(ovEntity, xnatEntity):
@@ -119,28 +180,35 @@ def _add_entity_attributes(ovEntity, xnatEntity):
         ovEntity.addProperty(k, v)
 
 
+def file_info(xnat, f):
+    fileExt = os.path.splitext(f._uri)[-1].lstrip('.')
+    #TODO: special cased
+    if fileExt == 'dcm':
+        uti = 'org.nema.dicom'
+    else:
+        uti = ovation.api.ovation_package().Resource.UTIForExtension(fileExt)
+    url = xnat._server + f._uri
+    return url, uti
+
+
 def _insert_entity_resources(ovEntity, xnatEntity):
     xnat = xnatEntity._intf
-    for f in entity_resource_files(xnatEntity):
-        fileExt = os.path.splitext(f._uri)[-1].lstrip('.')
+    for rsrc in iterate_entity_collection(xnatEntity.resources):
+        label = xnat_api(rsrc.label)
+        for f in iterate_entity_collection(rsrc.files):
 
-        #TODO: special cased
-        if fileExt == 'dcm':
-            uti = 'org.nema.dicom'
-        else:
-            uti = ovation.api.ovation_package().Resource.UTIForExtension(fileExt)
+            url, uti = file_info(xnat, f)
 
-        url = xnat._server + f._uri
-
-        ovEntity.addURLResource(uti, url, url)
+            ovEntity.addURLResource(uti, xnat_api(f.label) + '(' + label + ')', url)
 
 
-def _import_entity_common(ovEntity, xnatEntity):
+def _import_entity_common(ovEntity, xnatEntity, resources=True):
     _add_entity_attributes(ovEntity, xnatEntity)
     dtype = xnatEntity.datatype()
     ovEntity.addProperty(DATATYPE_PROPERTY, dtype)
     _add_entity_keywords(ovEntity, xnatEntity)
-    _insert_entity_resources(ovEntity, xnatEntity)
+    if(resources):
+        _insert_entity_resources(ovEntity, xnatEntity)
 
 def import_subject(dsc, xnatSubject, project=None, timezone='UTC'):
     """

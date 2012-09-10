@@ -11,7 +11,7 @@ class ImportingSessions(OvationTestBase):
 
     @istest
     @patch_xnat_api
-    def should_import_session_from_subject_as_experiments_with_one_epochgroup(self):
+    def should_import_session_from_subject_as_experiments(self):
         xnatSubject = subject_mock("1", "PROJECT_NAME")
 
         ctx = self.dsc.getContext()
@@ -20,12 +20,7 @@ class ImportingSessions(OvationTestBase):
 
         # Assertions
         self.assertGreaterEqual(len(xnatSubject.experiments()), 1)
-        self.assertEqual(len(s.getExperiments()), len(xnatSubject.experiments()))
-
-        for exp in s.getExperiments():
-            self.assertEqual(len(exp.getEpochGroups()), 1)
-
-
+        self.assertEqual(len(project.getExperiments()), len(xnatSubject.experiments()))
 
 
     @istest
@@ -37,14 +32,4 @@ class ImportingSessions(OvationTestBase):
         for exp in s.getExperiments():
             self.assertNotNone(exp.getOwnerProperty(DATATYPE_PROPERTY))
 
-    @istest
-    @patch_xnat_api
-    def should_import_epochgroup_per_scan(self):
-        xnatSubject = subject_mock("1", "PROJECT_NAME")
-
-        ctx = self.dsc.getContext()
-        project = ctx.insertProject('session_import', 'session_import', api.datetime())
-        s = import_subject(self.dsc, xnatSubject, project=project)
-
-        self.fail('implement')
 
