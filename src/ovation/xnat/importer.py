@@ -5,7 +5,9 @@ import os
 import ovation
 
 from ovation.xnat.exceptions import OvationXnatException
+#noinspection PyUnresolvedReferences
 from time import mktime, strptime
+#noinspection PyUnresolvedReferences
 from datetime import datetime
 import ovation.api as api
 from ovation.xnat.util import  xnat_api_pause, xnat_api, atomic_attributes, entity_keywords, iterate_entity_collection, to_joda_datetime, dict2map
@@ -129,7 +131,9 @@ def import_scan(dsc, src, exp, xnatScan, timezone='UTC'):
     g = exp.insertEpochGroup(src, scanType, startTime, endTime)
     _import_entity_common(g, xnatScan, resources=False)
 
-    parameters = dict2map({}) #TODO from parameters/ attrs or from .get_params()?
+    parameterPairs = [(k, xnat_api(attrs.get, k)) for k in attrs() if k.startswith(dtype + '/parameters/')]
+    paramDict = { k : v for (k,v) in parameterPairs}
+    parameters = dict2map(paramDict)
     scannerParameters = parameters
 
     ovation = api.ovation_package()
