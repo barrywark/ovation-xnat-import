@@ -27,7 +27,7 @@ class ImportingScans(OvationTestBase):
             g = exp.getEpochGroupsWithLabel(id).iterator().next()
             for r in s.resources():
                 label = r.label()
-                self.assertEquals(len(g.getChildren(label)), 1)
+                self.assertEqual(len(g.getChildren(label)), 1)
 
 
     @istest
@@ -51,7 +51,7 @@ class ImportingScans(OvationTestBase):
             for r in s.resources():
                 label = r.label()
                 typeGroup = g.getChildren(label)[0]
-                self.assertEquals(typeGroup.getEpochCount(), len(r.files()))
+                self.assertEqual(typeGroup.getEpochCount(), len(r.files()))
 
                 for epoch in typeGroup.getEpochs():
                     self.assertEqual(len(epoch.getResponseNames()), 1)
@@ -85,7 +85,7 @@ class ImportingScans(OvationTestBase):
 
         for scan in xnatSession.scans():
             id = scan.attrs.get('xnat:mrScanData/type')
-            self.assertEquals(len(list(exp.getEpochGroupsWithLabel(id).iterator())), 1)
+            self.assertEqual(len(list(exp.getEpochGroupsWithLabel(id).iterator())), 1)
 
 
     @istest
@@ -133,4 +133,4 @@ class ImportingScans(OvationTestBase):
 
         for g in exp.getEpochGroups():
             dtype = xnatSession.scans()[0].datatype()
-            self.assertEquals(g.getOwnerProperty(DATATYPE_PROPERTY), dtype)
+            self.assertEqual(g.getOwnerProperty(DATATYPE_PROPERTY), dtype)

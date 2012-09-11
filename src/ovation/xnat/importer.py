@@ -3,7 +3,7 @@ Copyright (c) 2012 Physion Consulting, LLC. All rights reserved.
 '''
 import os
 import ovation
-
+import logging
 from ovation.xnat.exceptions import OvationXnatException
 #noinspection PyUnresolvedReferences
 from time import mktime, strptime
@@ -12,6 +12,8 @@ from datetime import datetime
 import ovation.api as api
 from ovation.xnat.util import  xnat_api_pause, xnat_api, atomic_attributes, entity_keywords, iterate_entity_collection, to_joda_datetime, dict2map
 
+
+_log = logging.getLogger(name=__name__)
 
 class XnatImportError(OvationXnatException):
     pass
@@ -40,6 +42,7 @@ def import_project(dsc, xnatProject, timezone='UTC', importProjectTree=True):
     """
 
     projectID = xnat_api(xnatProject.id)
+    _log.info('Importing project: ' + projectID)
     name = xnat_api(xnatProject.attrs.get,'xnat:projectData/name')
     purpose = xnat_api(xnatProject.attrs.get, 'xnat:projectData/description')
 
@@ -91,6 +94,9 @@ def import_session(dsc, src, project, xnatSession, timezone='UTC'):
 
     attrs = xnatSession.attrs
     dtype = xnat_api(xnatSession.datatype)
+
+    _log.info('    Importing session: ' + dtype)
+
     dateString = xnat_api(attrs.get, dtype + '/date')
     timeString = xnat_api(attrs.get, dtype + '/time')
     purpose = xnat_api(attrs.get, dtype + '/note')
@@ -112,6 +118,8 @@ def import_scan(dsc, src, exp, xnatScan, timezone='UTC'):
 
     attrs = xnatScan.attrs
     dtype = xnat_api(xnatScan.datatype)
+
+    _log.info('      Importing scan: ' + dtype)
     dateString = xnat_api(attrs.get, dtype + '/date')
     timeString = xnat_api(attrs.get, dtype + '/parameters/scanTime')
     dateTimeString = dateString + ' ' + timeString
@@ -203,7 +211,7 @@ def _insert_entity_resources(ovEntity, xnatEntity):
 
             url, uti = file_info(xnat, f)
 
-            ovEntity.addURLResource(uti, xnat_api(f.label) + '(' + label + ')', url)
+            ovEntity.addURLResource(uti, xnat_api(f.label) + ' (' + label + ')', url)
 
 
 def _import_entity_common(ovEntity, xnatEntity, resources=True):
@@ -220,6 +228,8 @@ def import_subject(dsc, xnatSubject, project=None, timezone='UTC'):
     """
 
     sourceID = xnat_api(xnatSubject.id)
+
+    _log.info('  Importing subject: ' + sourceID)
 
     ctx = dsc.getContext()
 
