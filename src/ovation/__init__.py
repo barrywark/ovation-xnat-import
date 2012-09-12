@@ -1,6 +1,10 @@
+'''
+Copyright (c) 2012 Physion Consulting, LLC. All rights reserved.
+'''
+
+
 import logging
 
-__author__ = 'barry'
-
-_log = logging.getLogger('ovation')
+# Create a console logging handler for ovation package
+_log = logging.getLogger(__name__)
 _log.addHandler(logging.StreamHandler())
