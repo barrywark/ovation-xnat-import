@@ -2,6 +2,7 @@
 Copyright (c) 2012 Physion Consulting, LLC. All rights reserved.
 '''
 import os
+from pyxnat.core.errors import DatabaseError
 import ovation
 import logging
 from ovation.xnat.exceptions import OvationXnatException
@@ -13,7 +14,7 @@ import ovation.api as api
 from ovation.xnat.util import  xnat_api_pause, xnat_api, atomic_attributes, entity_keywords, iterate_entity_collection, to_joda_datetime, dict2map
 
 
-_log = logging.getLogger(name=__name__)
+_log = logging.getLogger(__name__)
 
 class XnatImportError(OvationXnatException):
     pass
@@ -33,6 +34,7 @@ def import_projects(dsc, xnat):
 DATATYPE_PROPERTY = 'xnat:datatype'
 DATE_FORMAT = '%Y-%m-%d'
 DATETIME_FORMAT = '%Y-%m-%d %H:%M:%S.%f'
+DATETIMESHORT_FORMAT = '%Y-%m-%d %H:%M:%S'
 
 
 def import_project(dsc, xnatProject, timezone='UTC', importProjectTree=True):
@@ -45,6 +47,9 @@ def import_project(dsc, xnatProject, timezone='UTC', importProjectTree=True):
     _log.info('Importing project: ' + projectID)
     name = xnat_api(xnatProject.attrs.get,'xnat:projectData/name')
     purpose = xnat_api(xnatProject.attrs.get, 'xnat:projectData/description')
+
+    if not purpose:
+        purpose = "<None>"
 
     # Find the earliest session date in the project
     xnat = xnatProject._intf
@@ -83,8 +88,10 @@ def import_project(dsc, xnatProject, timezone='UTC', importProjectTree=True):
     _import_entity_common(project, xnatProject)
 
     if importProjectTree:
-        for s in iterate_entity_collection(xnatProject.subjects):
-            import_subject(dsc, s, timezone=timezone)
+        _log.info("  importing project tree...")
+        subjectIDs = xnat_api(xnatProject.subjects().get)
+        for s in subjectIDs:
+            import_subject(dsc, xnat_api(xnatProject.subject, s), timezone=timezone)
 
     return project
 
@@ -92,68 +99,98 @@ def import_session(dsc, src, project, xnatSession, timezone='UTC'):
     if project == None:
         return
 
-    attrs = xnatSession.attrs
-    dtype = xnat_api(xnatSession.datatype)
+    try:
+        attrs = xnatSession.attrs
+        dtype = xnat_api(xnatSession.datatype)
+        #print(dtype)
+        _log.info('    Importing session: ' + dtype)
 
-    _log.info('    Importing session: ' + dtype)
+        dateString = xnat_api(attrs.get, dtype + '/date')
+        timeString = xnat_api(attrs.get, dtype + '/time')
+        purpose = xnat_api(attrs.get, dtype + '/note')
+        if not purpose: #None or len 0
+            purpose = 'XNAT experiment ' + xnatSession._uri
 
-    dateString = xnat_api(attrs.get, dtype + '/date')
-    timeString = xnat_api(attrs.get, dtype + '/time')
-    purpose = xnat_api(attrs.get, dtype + '/note')
-    if not purpose: #None or len 0
-        purpose = 'XNAT experiment ' + xnatSession._uri
+        dateTimeString = dateString + ' ' + timeString
+        if timeString:
+            format = DATETIME_FORMAT if timeString.find('.') > 0 else DATETIMESHORT_FORMAT
+        else:
+            format = DATE_FORMAT
 
-    dateTimeString = dateString + ' ' + timeString
-    startTime = datetime.fromtimestamp(mktime(strptime(dateTimeString, DATE_FORMAT if len(timeString) == 0 else DATETIME_FORMAT)))
+        startTime = datetime.fromtimestamp(mktime(strptime(dateTimeString, format)))
 
-    exp = project.insertExperiment(purpose, to_joda_datetime(startTime, timezone))
-    _import_entity_common(exp, xnatSession)
+        exp = project.insertExperiment(purpose, to_joda_datetime(startTime, timezone))
+        _import_entity_common(exp, xnatSession)
 
-    for scan in iterate_entity_collection(xnatSession.scans):
-        import_scan(dsc, src, exp, scan, timezone=timezone)
+        scanIDs = xnat_api(xnatSession.scans().get)
+        for scanID in scanIDs:
+            import_scan(dsc, src, exp, xnat_api(xnatSession.scan, scanID), timezone=timezone)
 
-    return exp
+        return exp
+    except DatabaseError, e:
+        _log.exception("Unable to import session: " + e.message)
+        return None
 
 def import_scan(dsc, src, exp, xnatScan, timezone='UTC'):
 
-    attrs = xnatScan.attrs
     dtype = xnat_api(xnatScan.datatype)
 
     _log.info('      Importing scan: ' + dtype)
-    dateString = xnat_api(attrs.get, dtype + '/date')
-    timeString = xnat_api(attrs.get, dtype + '/parameters/scanTime')
-    dateTimeString = dateString + ' ' + timeString
+#    dateString = xnat_api(xnatScan.attrs.get, dtype + '/date')
+#        timeString = xnat_api(xnatScan.attrs.get, dtype + '/parameters/scanTime')
+#        dateTimeString = dateString + ' ' + timeString
+#
+#    if timeString:
+#        format = DATETIME_FORMAT if timeString.find('.') > 0 else DATETIMESHORT_FORMAT
+#    else:
+#        format = DATE_FORMAT
+#
+#        startTime = to_joda_datetime(
+#            datetime.fromtimestamp(mktime(strptime(dateTimeString, format))),
+#                    timezone)
 
-    startTime = to_joda_datetime(
-        datetime.fromtimestamp(mktime(strptime(dateTimeString, DATE_FORMAT if len(timeString) == 0 else DATETIME_FORMAT))),
-                timezone)
+
+    startTime = exp.getStartTime()
 
     parentSession = xnat_api(xnatScan.parent)
     parentDtype = xnat_api(parentSession.datatype)
     scanAttrs = parentSession.attrs
     sessionScanner = xnat_api(scanAttrs.get, parentDtype + '/scanner')
-    duration = float(xnat_api(scanAttrs.get, parentDtype + '/duration'))
+    durationString = xnat_api(scanAttrs.get, parentDtype + '/duration')
+    if durationString:
+        duration = float(durationString)
+    else:
+        _log.warn("Scan duration is empty")
+        duration = 1.0
+
     endTime = startTime.plusMillis(int(duration*1000))
 
-    scanType = xnat_api(attrs.get, dtype + '/type')
+    scanType = xnat_api(xnatScan.attrs.get, dtype + '/type')
     g = exp.insertEpochGroup(src, scanType, startTime, endTime)
     _import_entity_common(g, xnatScan, resources=False)
 
-    parameterPairs = [(k, xnat_api(attrs.get, k)) for k in attrs() if k.startswith(dtype + '/parameters/')]
-    paramDict = { k : v for (k,v) in parameterPairs}
+    try:
+        parameterPairs = [(k, xnat_api(xnatScan.attrs.get, k)) for k in xnatScan.attrs() if k.startswith(dtype + '/parameters/')]
+        paramDict = { k : v for (k,v) in parameterPairs}
+    except DatabaseError, e:
+        _log.exception("Unable to set parameters: " + e.message)
+        paramDict = {}
+
     parameters = dict2map(paramDict)
     scannerParameters = parameters
 
     ovation = api.ovation_package()
     BYTE_DATATYPE = ovation.NumericDataType(ovation.NumericDataFormat.SignedFixedPointDataType, 1, ovation.NumericByteOrder.ByteOrderNeutral)
+
     for r in iterate_entity_collection(xnatScan.resources):
+        _log.info("        Resource " + xnat_api(r.label))
+        print("Resource...")
         # Insert one epoch group per resource group
         resourceGroup = g.insertEpochGroup(xnat_api(r.label),
                             g.getStartTime())
 
         for f in iterate_entity_collection(r.files):
             # Import one epoch per resource file
-
             e = resourceGroup.insertEpoch(
                 g.getStartTime(),
                 g.getEndTime(), #TODO
@@ -162,6 +199,8 @@ def import_scan(dsc, src, exp, xnatScan, timezone='UTC'):
             )
 
             url,uti = file_info(xnatScan._intf, f)
+            _log.info("          File " + xnat_api(r.label))
+
             e.insertURLResponse(
                 resourceGroup.getExperiment().externalDevice(sessionScanner, sessionScanner), #TODO
                 scannerParameters,
@@ -215,10 +254,19 @@ def _insert_entity_resources(ovEntity, xnatEntity):
 
 
 def _import_entity_common(ovEntity, xnatEntity, resources=True):
-    _add_entity_attributes(ovEntity, xnatEntity)
-    dtype = xnatEntity.datatype()
+    try:
+        _add_entity_attributes(ovEntity, xnatEntity)
+    except DatabaseError, e:
+        _log.exception("Unable to set entity properties: " + e.message)
+
+    dtype = xnat_api(xnatEntity.datatype)
     ovEntity.addProperty(DATATYPE_PROPERTY, dtype)
-    _add_entity_keywords(ovEntity, xnatEntity)
+
+    try:
+        _add_entity_keywords(ovEntity, xnatEntity)
+    except DatabaseError, e:
+        _log.exception("Unable to set entity properties: " + e.message)
+
     if(resources):
         _insert_entity_resources(ovEntity, xnatEntity)
 
@@ -229,6 +277,7 @@ def import_subject(dsc, xnatSubject, project=None, timezone='UTC'):
 
     sourceID = xnat_api(xnatSubject.id)
 
+    #print(sourceID)
     _log.info('  Importing subject: ' + sourceID)
 
     ctx = dsc.getContext()
@@ -238,9 +287,10 @@ def import_subject(dsc, xnatSubject, project=None, timezone='UTC'):
 
     if r.isNew():
         _import_entity_common(src, xnatSubject)
-        
-    for xnatExperiment in iterate_entity_collection(xnatSubject.experiments):
-        import_session(dsc, src, project, xnatExperiment, timezone=timezone)
+
+    expIDs = xnat_api(xnatSubject.experiments().get)
+    for experimentID in expIDs:
+        import_session(dsc, src, project, xnat_api(xnatSubject.experiment, experimentID), timezone=timezone)
 
     return src
 

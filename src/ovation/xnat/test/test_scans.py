@@ -22,7 +22,8 @@ class ImportingScans(OvationTestBase):
         xnatSession = session_mock()
         exp = import_session(self.dsc, src, project, xnatSession)
 
-        for s in xnatSession.scans():
+        for scanID in xnatSession.scans().get():
+            s = xnatSession.scan(scanID)
             id = s.attrs.get('xnat:mrScanData/type')
             g = exp.getEpochGroupsWithLabel(id).iterator().next()
             for r in s.resources():
@@ -45,7 +46,8 @@ class ImportingScans(OvationTestBase):
         sessionType = xnatSession.datatype()
         sessionScanner = xnatSession.attrs.get(sessionType + '/scanner')
 
-        for s in xnatSession.scans():
+        for scanID in xnatSession.scans().get():
+            s = xnatSession.scan(scanID)
             id = s.attrs.get('xnat:mrScanData/type')
             g = exp.getEpochGroupsWithLabel(id).iterator().next()
             for r in s.resources():
@@ -69,8 +71,8 @@ class ImportingScans(OvationTestBase):
 
         exp = import_session(self.dsc, src, project, xnatSession)
 
-        self.assertGreaterEqual(xnatSession.scans(), 1)
-        self.assertEqual(len(exp.getEpochGroups()), len(xnatSession.scans()))
+        self.assertGreaterEqual(xnatSession.scans().get(), 1)
+        self.assertEqual(len(exp.getEpochGroups()), len(xnatSession.scans().get()))
 
     @istest
     @patch_xnat_api
@@ -83,12 +85,14 @@ class ImportingScans(OvationTestBase):
 
         exp = import_session(self.dsc, src, project, xnatSession)
 
-        for scan in xnatSession.scans():
+        for scanID in xnatSession.scans().get():
+            scan = xnatSession.scan(scanID)
             id = scan.attrs.get('xnat:mrScanData/type')
             self.assertEqual(len(list(exp.getEpochGroupsWithLabel(id).iterator())), 1)
 
 
     @istest
+    @patch_xnat_api
     def should_import_scan_parameters_as_epoch_parameters(self):
         ctx = self.dsc.getContext()
         src = ctx.insertSource('test')
@@ -104,6 +108,7 @@ class ImportingScans(OvationTestBase):
             self.assertGreater(parameters.size(), 0)
 
     @istest
+    @patch_xnat_api
     def should_import_scanner_perameters_as_device_parameters(self):
         ctx = self.dsc.getContext()
         src = ctx.insertSource('test')
@@ -122,6 +127,7 @@ class ImportingScans(OvationTestBase):
             self.assertGreater(parameters.size(), 0)
 
     @istest
+    @patch_xnat_api
     def should_set_scan_datatype(self):
 
         ctx = self.dsc.getContext()
@@ -132,5 +138,6 @@ class ImportingScans(OvationTestBase):
         exp = import_session(self.dsc, src, project, xnatSession)
 
         for g in exp.getEpochGroups():
-            dtype = xnatSession.scans()[0].datatype()
+            scanID = xnatSession.scans().get()[0]
+            dtype = xnatSession.scan(scanID).datatype()
             self.assertEqual(g.getOwnerProperty(DATATYPE_PROPERTY), dtype)

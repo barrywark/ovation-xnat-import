@@ -77,9 +77,9 @@ class OvationTestBase(unittest.TestCase):
 
         self.dsc = self.test_manager.setupDatabase()
 
+        # Make sure we cleanup
+        self.addCleanup(clean_local_database, self.test_manager)
 
-    def tearDown(self):
-        clean_local_database(self.test_manager)
 
 def call_fn(fn, *args, **kwargs):
     return fn(*args, **kwargs)
@@ -143,7 +143,11 @@ def session_mock(baseURI=None, xnat=None):
     scan.id = Mock(return_value="1")
     _add_mock_resource_files(xnat, scan)
 
-    exp1.scans = Mock(side_effect=return_collection((scan,)))
+    scans = { '1' : scan }
+    get = Mock()
+    get.get = Mock(side_effect=return_collection(('1',)))
+    exp1.scans = Mock(return_value=get)
+    exp1.scan = Mock(side_effect=lambda x: scans.get(x))
 
     return exp1
 
@@ -167,9 +171,13 @@ def subject_mock(id, projectID):
     #Sessions
     exp1 = session_mock(baseURI=s._uri, xnat=xnat)
 
-    sessions = (exp1,)
+    sessions = { '1':exp1 }
 
-    s.experiments = Mock(side_effect=return_collection(sessions))
+
+    get = Mock()
+    get.get = Mock(side_effect=return_collection(['1']))
+    s.experiments = Mock(return_value=get)
+    s.experiment = Mock(side_effect=lambda x: sessions.get(x))
 
     return s
 
@@ -250,8 +258,13 @@ def project_mock(projectName='PROJECT_NAME'):
     projectMock.datatype = Mock(return_value='xnat:projectData')
 
     # Subjects
-    subjects = [subject_mock('1', projectMock.id()), subject_mock('2', projectMock.id())]
-    projectMock.subjects = Mock(side_effect=return_collection(subjects))
+    subjects = { '1' : subject_mock('1', projectMock.id()),
+                 '2' : subject_mock('2', projectMock.id())
+                 }
+    get = Mock()
+    get.get = Mock(side_effect=return_collection(['1','2']))
+    projectMock.subjects = Mock(return_value=get)
+    projectMock.subject = Mock(side_effect=lambda k: subjects.get(k))
 
     # Resources
     _add_mock_resource_files(xnat, projectMock)

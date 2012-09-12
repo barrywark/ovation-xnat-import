@@ -1,13 +1,16 @@
 '''
 Copyright (c) 2012 Physion Consulting, LLC. All rights reserved.
 '''
+import logging
 
-from pyxnat.core.errors import DatabaseError
 from ovation import api
 
 __author__ = 'barry'
 
+#noinspection PyUnresolvedReferences
 import time
+
+_log = logging.getLogger(__name__)
 
 def xnat_api(fn, *args, **kwargs):
     xnat_api_pause()
@@ -15,8 +18,8 @@ def xnat_api(fn, *args, **kwargs):
 
 
 
-def xnat_api_pause():
-    time.sleep(1)
+def xnat_api_pause(seconds=1):
+    time.sleep(seconds)
 
 def iterate_entity_collection(fn):
     for e in fn():
@@ -64,20 +67,25 @@ def _attr_comps(attr):
     return attr.split('/')[1:]
 
 def atomic_attributes(e):
-    keys = xnat_api(e.attrs)
-    attrs = e.attrs
+    try:
+        keys = xnat_api(e.attrs)
+        attrs = e.attrs
 
-    result = {}
-    for key in keys:
-        if is_atomic_attribute(e, key):
-            try:
-                value = xnat_api(attrs.get, key)
-                result[key] = value
-            except DatabaseError:
-                pass
+        result = {}
+        for key in keys:
+            if is_atomic_attribute(e, key):
+                try:
+                    value = xnat_api(attrs.get, key)
+                    result[key] = value
+                except StandardError, e:
+                    _log.exception('Unable to retrieve attributes: ' + e.message)
+                except StopIteration:
+                    _log.exception('Unable to retrieve attributes: StopIteration')
 
-
-    return result
+        return result
+    except StandardError, e:
+        _log.exception(e.message)
+        return {}
 
 def to_joda_datetime(date, timezone):
     return api.datetime(date.year,

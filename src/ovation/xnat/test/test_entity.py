@@ -31,9 +31,10 @@ class ImportingEntityMetadata(OvationTestBase):
         xnat = xnatProject._intf
 
         files = entity_resource_files(xnatProject)
-        self.assertEqual(len(project.getResourceNames()), len(files))
+        self.assertEqual(len(project.getResourceNames()), len(list(files)))
 
     @istest
+    @patch_xnat_api
     def should_import_attrs(self):
 
         projectName = 'PROJECT_NAME'

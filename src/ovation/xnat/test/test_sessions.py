@@ -19,8 +19,8 @@ class ImportingSessions(OvationTestBase):
         s = import_subject(self.dsc, xnatSubject, project=project)
 
         # Assertions
-        self.assertGreaterEqual(len(xnatSubject.experiments()), 1)
-        self.assertEqual(len(project.getExperiments()), len(xnatSubject.experiments()))
+        self.assertGreaterEqual(len(xnatSubject.experiments().get()), 1)
+        self.assertEqual(len(project.getExperiments()), len(xnatSubject.experiments().get()))
 
 
     @istest
