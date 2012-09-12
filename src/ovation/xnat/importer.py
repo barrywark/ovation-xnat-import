@@ -167,25 +167,26 @@ def import_scan(dsc, src, exp, xnatScan, timezone='UTC'):
     endTime = startTime.plusMillis(int(duration*1000))
 
     scanType = xnat_api(xnatScan.attrs.get, dtype + '/type')
+    if not scanType:
+        scanType = "<unknown type>"
     g = exp.insertEpochGroup(src, scanType, startTime, endTime)
     _import_entity_common(g, xnatScan, resources=False)
 
     try:
-        parameterPairs = []
+        parametersDict = {}
         # Retrieving each parameter may throw a DatabaseError, so we can't use a list comprehension
         for k in xnatScan.attrs():
             try:
                 if k.startswith(dtype + '/parameters/'):
-                    parameterPairs.append(k, xnat_api(xnatScan.attrs.get, k))
+                    parametersDict[k] = xnat_api(xnatScan.attrs.get, k)
             except (DatabaseError,StopIteration):
                 _log.error("Unable to retrieve parameter " + k)
 
-        paramDict = { k : v for (k,v) in parameterPairs}
     except DatabaseError, e:
-        _log.exception("Unable to set parameters: " + e.message)
-        paramDict = {}
+        _log.error("Unable to set parameters")
+        parametersDict = {}
 
-    parameters = dict2map(paramDict)
+    parameters = dict2map(parametersDict)
     scannerParameters = parameters
 
     ovation = api.ovation_package()
@@ -254,6 +255,8 @@ def _insert_entity_resources(ovEntity, xnatEntity):
     xnat = xnatEntity._intf
     for rsrc in iterate_entity_collection(xnatEntity.resources):
         label = xnat_api(rsrc.label)
+        if not label:
+            label = "<empty>"
         for f in iterate_entity_collection(rsrc.files):
 
             url, uti = file_info(xnat, f)
