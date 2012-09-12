@@ -44,7 +44,7 @@ class ImportingEntityMetadata(OvationTestBase):
         attributes = xnat_api(xnatSubject.attrs)
         attrs = xnatSubject.attrs
         for attr in attributes:
-            if is_atomic_attribute(xnatSubject, attrs):
+            if is_atomic_attribute(attrs(), attrs):
                 value = xnat_api(attrs.get, attr)
                 eq_(subject.getOwnerProperty(attr), value)
 

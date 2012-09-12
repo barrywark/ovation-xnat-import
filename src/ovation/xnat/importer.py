@@ -88,10 +88,11 @@ def import_project(dsc, xnatProject, timezone='UTC', importProjectTree=True):
     _import_entity_common(project, xnatProject)
 
     if importProjectTree:
-        _log.info("  importing project tree...")
+        _log.info("  Importing project tree...")
         subjectIDs = xnat_api(xnatProject.subjects().get)
-        for s in subjectIDs:
-            import_subject(dsc, xnat_api(xnatProject.subject, s), timezone=timezone)
+        for subjectID in subjectIDs:
+            s = xnat_api(xnatProject.subject, subjectID)
+            import_subject(dsc, s, timezone=timezone, project=project)
 
     return project
 
@@ -170,7 +171,15 @@ def import_scan(dsc, src, exp, xnatScan, timezone='UTC'):
     _import_entity_common(g, xnatScan, resources=False)
 
     try:
-        parameterPairs = [(k, xnat_api(xnatScan.attrs.get, k)) for k in xnatScan.attrs() if k.startswith(dtype + '/parameters/')]
+        parameterPairs = []
+        # Retrieving each parameter may throw a DatabaseError, so we can't use a list comprehension
+        for k in xnatScan.attrs():
+            try:
+                if k.startswith(dtype + '/parameters/'):
+                    parameterPairs.append(k, xnat_api(xnatScan.attrs.get, k))
+            except (DatabaseError,StopIteration):
+                _log.error("Unable to retrieve parameter " + k)
+
         paramDict = { k : v for (k,v) in parameterPairs}
     except DatabaseError, e:
         _log.exception("Unable to set parameters: " + e.message)
@@ -184,7 +193,6 @@ def import_scan(dsc, src, exp, xnatScan, timezone='UTC'):
 
     for r in iterate_entity_collection(xnatScan.resources):
         _log.info("        Resource " + xnat_api(r.label))
-        print("Resource...")
         # Insert one epoch group per resource group
         resourceGroup = g.insertEpochGroup(xnat_api(r.label),
                             g.getStartTime())
@@ -290,7 +298,8 @@ def import_subject(dsc, xnatSubject, project=None, timezone='UTC'):
 
     expIDs = xnat_api(xnatSubject.experiments().get)
     for experimentID in expIDs:
-        import_session(dsc, src, project, xnat_api(xnatSubject.experiment, experimentID), timezone=timezone)
+        xnatExp = xnat_api(xnatSubject.experiment, experimentID)
+        import_session(dsc, src, project, xnatExp, timezone=timezone)
 
     return src
 

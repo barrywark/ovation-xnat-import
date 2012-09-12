@@ -2,6 +2,7 @@
 Copyright (c) 2012 Physion Consulting, LLC. All rights reserved.
 '''
 import logging
+from pyxnat.core.errors import DatabaseError
 
 from ovation import api
 
@@ -47,8 +48,8 @@ def dict2map(d):
 
     return m
 
-def is_atomic_attribute(e, attr):
-    return _is_atomic_attribute_in_attrs(attr, e.attrs())
+def is_atomic_attribute(attrs, attr):
+    return _is_atomic_attribute_in_attrs(attr, attrs)
 
 def _is_atomic_attribute_in_attrs(attr, attrs):
     if attr not in attrs:
@@ -67,25 +68,24 @@ def _attr_comps(attr):
     return attr.split('/')[1:]
 
 def atomic_attributes(e):
+    result = {}
     try:
         keys = xnat_api(e.attrs)
         attrs = e.attrs
-
-        result = {}
         for key in keys:
-            if is_atomic_attribute(e, key):
+            if is_atomic_attribute(keys, key):
                 try:
                     value = xnat_api(attrs.get, key)
                     result[key] = value
+                except (DatabaseError, StopIteration):
+                    _log.error('Unable to retrieve attribute ' + key)
                 except StandardError, e:
-                    _log.exception('Unable to retrieve attributes: ' + e.message)
-                except StopIteration:
-                    _log.exception('Unable to retrieve attributes: StopIteration')
+                    _log.exception('Unable to retrieve attribute ' + key)
 
-        return result
-    except StandardError, e:
-        _log.exception(e.message)
-        return {}
+    except DatabaseError:
+        _log.exception("Unable to retrieve entity attribute keys")
+
+    return result
 
 def to_joda_datetime(date, timezone):
     return api.datetime(date.year,
